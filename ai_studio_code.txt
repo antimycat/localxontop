@@ -1,0 +1,1548 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  RotateCcw,
+  Youtube,
+  MessageSquare,
+  CloudRain,
+  Snowflake,
+  CloudOff,
+  Image as ImageIcon,
+  Check,
+  Copy,
+  ExternalLink,
+  ArrowLeft,
+  X,
+  Sparkles,
+  Music,
+  GripVertical,
+  ChevronDown,
+  ChevronUp,
+  EyeOff,
+  CheckCircle2,
+  RefreshCw,
+  Code2,
+  Link as LinkIcon,
+} from 'lucide-react';
+
+/* =========================================================================
+   1. TYPES & ASSET CONFIGURATION
+   ========================================================================= */
+
+export interface AssetConfigType {
+  logoL: string;
+  logoOcalx: string;
+  mainLogo?: string;
+  backgroundImage?: string;
+  youtubeMusicId: string;
+  soundAK47?: string;
+  soundGlass?: string;
+}
+
+export interface ToastMessage {
+  id: string;
+  title: string;
+  subtitle?: string;
+  type?: 'success' | 'info' | 'clipboard';
+  actionUrl?: string;
+  actionLabel?: string;
+}
+
+export const DEFAULT_ASSET_CONFIG: AssetConfigType = {
+  logoL: 'https://cdn.phototourl.com/free/2026-09-20-71f33aa7-38db-454f-a145-945a55897d2a.jpg',
+  logoOcalx: 'https://i.postimg.cc/85zK6L3W/image.png',
+  mainLogo: '',
+  backgroundImage: '',
+  youtubeMusicId: 'tm9GpM3lV3s', // GLXXMSTRIDER - DON'T STOP - Slowed
+  soundAK47: '',
+  soundGlass: '',
+};
+
+const STORAGE_KEY = 'localx_asset_config_v2';
+
+/* =========================================================================
+   2. TYPOGRAPHY: 'ocalx' TEXT COMPONENT
+   ========================================================================= */
+
+const RoundedOcalx: React.FC<{ className?: string }> = ({ className = '' }) => {
+  return (
+    <div
+      className={`inline-flex items-center select-none ${className}`}
+      style={{ fontFamily: "'Comfortaa', 'Outfit', sans-serif" }}
+    >
+      <span
+        className="font-bold tracking-tight text-white leading-none text-4xl sm:text-6xl md:text-7xl"
+        style={{
+          filter:
+            'drop-shadow(0 0 20px rgba(255, 255, 255, 0.55)) drop-shadow(0 0 40px rgba(255, 255, 255, 0.25))',
+          letterSpacing: '-0.025em',
+          textRendering: 'geometricPrecision',
+        }}
+      >
+        ocalx
+      </span>
+    </div>
+  );
+};
+
+/* =========================================================================
+   3. WEBGL CINEMATIC DARK WAVE BACKGROUND
+   ========================================================================= */
+
+const BackgroundCanvas: React.FC<{ opacity?: number }> = ({ opacity = 1 }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const gl = canvas.getContext('webgl');
+    if (!gl) return;
+
+    const vsSource = `
+      attribute vec2 p;
+      void main() {
+        gl_Position = vec4(p, 0.0, 1.0);
+      }
+    `;
+
+    const fsSource = `
+      precision highp float;
+      uniform float t;
+      uniform vec2 r;
+      void main() {
+        vec2 p = (gl_FragCoord.xy * 2.0 - r) / min(r.x, r.y);
+        for (float i = 1.0; i < 8.0; i++) {
+          p.x += 0.3 / i * sin(i * 3.0 * p.y + t);
+          p.y += 0.3 / i * cos(i * 3.0 * p.x + t);
+        }
+        float c = 0.5 + 0.5 * sin(p.x + p.y);
+        gl_FragColor = vec4(vec3(c * 0.12 + 0.03) + pow(c, 12.0) * 0.3, 1.0);
+      }
+    `;
+
+    const createShader = (type: number, source: string) => {
+      const shader = gl.createShader(type);
+      if (!shader) return null;
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        gl.deleteShader(shader);
+        return null;
+      }
+      return shader;
+    };
+
+    const vertShader = createShader(gl.VERTEX_SHADER, vsSource);
+    const fragShader = createShader(gl.FRAGMENT_SHADER, fsSource);
+    if (!vertShader || !fragShader) return;
+
+    const program = gl.createProgram();
+    if (!program) return;
+
+    gl.attachShader(program, vertShader);
+    gl.attachShader(program, fragShader);
+    gl.linkProgram(program);
+
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return;
+    gl.useProgram(program);
+
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      gl.STATIC_DRAW
+    );
+
+    const posAttrLoc = gl.getAttribLocation(program, 'p');
+    gl.enableVertexAttribArray(posAttrLoc);
+    gl.vertexAttribPointer(posAttrLoc, 2, gl.FLOAT, false, 0, 0);
+
+    const timeUniformLoc = gl.getUniformLocation(program, 't');
+    const resUniformLoc = gl.getUniformLocation(program, 'r');
+
+    let animationFrameId: number;
+
+    const handleResize = () => {
+      if (!canvas) return;
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+
+    const render = (time: number) => {
+      if (resUniformLoc) gl.uniform2f(resUniformLoc, canvas.width, canvas.height);
+      if (timeUniformLoc) gl.uniform1f(timeUniformLoc, time * 0.0015);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    animationFrameId = requestAnimationFrame(render);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationFrameId);
+      gl.deleteProgram(program);
+      gl.deleteShader(vertShader);
+      gl.deleteShader(fragShader);
+      gl.deleteBuffer(positionBuffer);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-1000"
+      style={{ opacity }}
+    />
+  );
+};
+
+/* =========================================================================
+   4. REALISTIC RAIN CANVAS (with Splashes)
+   ========================================================================= */
+
+interface RainDrop {
+  x: number;
+  y: number;
+  length: number;
+  speed: number;
+  thickness: number;
+  alpha: number;
+  layer: 'fore' | 'mid' | 'back';
+}
+
+interface Splash {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  alpha: number;
+  radius: number;
+}
+
+const RainCanvas: React.FC<{
+  density?: number;
+  windAngle?: number;
+  speedMultiplier?: number;
+  opacity?: number;
+}> = ({ density = 160, windAngle = 0.12, speedMultiplier = 1.05, opacity = 0.85 }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    const drops: RainDrop[] = [];
+    const count = Math.floor(density * (width / 1200));
+
+    for (let i = 0; i < count; i++) {
+      const isFore = Math.random() > 0.65;
+      const isMid = !isFore && Math.random() > 0.4;
+      drops.push({
+        x: Math.random() * (width + 200) - 100,
+        y: Math.random() * height,
+        length: (isFore ? 26 : isMid ? 18 : 12) + Math.random() * 8,
+        speed: ((isFore ? 20 : isMid ? 14 : 9) + Math.random() * 6) * speedMultiplier,
+        thickness: isFore ? 1.6 : isMid ? 1.2 : 0.8,
+        alpha: isFore ? 0.65 : isMid ? 0.45 : 0.25,
+        layer: isFore ? 'fore' : isMid ? 'mid' : 'back',
+      });
+    }
+
+    const splashes: Splash[] = [];
+    let animationId: number;
+    const windX = Math.sin(windAngle);
+    const windY = Math.cos(windAngle);
+
+    const animate = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      for (let i = 0; i < drops.length; i++) {
+        const d = drops[i];
+        ctx.beginPath();
+        ctx.moveTo(d.x, d.y);
+        ctx.lineTo(d.x + windX * d.length, d.y + windY * d.length);
+        ctx.strokeStyle = `rgba(215, 230, 255, ${d.alpha * opacity})`;
+        ctx.lineWidth = d.thickness;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        d.x += windX * d.speed;
+        d.y += windY * d.speed;
+
+        if (d.y > height) {
+          if (d.layer === 'fore' && Math.random() > 0.6) {
+            splashes.push({
+              x: d.x,
+              y: height - Math.random() * 10,
+              vx: (Math.random() - 0.5) * 3,
+              vy: -(Math.random() * 2 + 1),
+              alpha: 0.6,
+              radius: Math.random() * 1.5 + 0.8,
+            });
+          }
+          d.y = -d.length - Math.random() * 40;
+          d.x = Math.random() * (width + 300) - 150;
+        }
+
+        if (d.x > width + 150) d.x = -100;
+        else if (d.x < -150) d.x = width + 100;
+      }
+
+      for (let s = splashes.length - 1; s >= 0; s--) {
+        const sp = splashes[s];
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(220, 235, 255, ${sp.alpha * opacity})`;
+        ctx.fill();
+
+        sp.x += sp.vx;
+        sp.y += sp.vy;
+        sp.vy += 0.15;
+        sp.alpha *= 0.9;
+
+        if (sp.alpha < 0.05 || sp.y > height) splashes.splice(s, 1);
+      }
+
+      animationId = requestAnimationFrame(animate);
+    };
+
+    animationId = requestAnimationFrame(animate);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationId);
+    };
+  }, [density, windAngle, speedMultiplier, opacity]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none z-20"
+      style={{ mixBlendMode: 'screen' }}
+    />
+  );
+};
+
+/* =========================================================================
+   5. REALISTIC SNOW CANVAS (Multi-Plane Parallax Depth)
+   ========================================================================= */
+
+interface SnowflakeItem {
+  x: number;
+  y: number;
+  radius: number;
+  speed: number;
+  drift: number;
+  phase: number;
+  phaseSpeed: number;
+  alpha: number;
+  layer: 'fore' | 'mid' | 'back';
+}
+
+const SnowCanvas: React.FC<{
+  density?: number;
+  speedMultiplier?: number;
+  opacity?: number;
+}> = ({ density = 140, speedMultiplier = 1.0, opacity = 0.9 }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    const flakes: SnowflakeItem[] = [];
+    const count = Math.floor(density * (width / 1200));
+
+    for (let i = 0; i < count; i++) {
+      const rand = Math.random();
+      let layer: 'fore' | 'mid' | 'back' = 'mid';
+      let radius = 1.6 + Math.random() * 1.5;
+      let speed = (1.0 + Math.random() * 0.9) * speedMultiplier;
+      let alpha = 0.45 + Math.random() * 0.3;
+
+      if (rand > 0.8) {
+        layer = 'fore';
+        radius = 3.0 + Math.random() * 2.5;
+        speed = (1.8 + Math.random() * 1.4) * speedMultiplier;
+        alpha = 0.75 + Math.random() * 0.25;
+      } else if (rand < 0.35) {
+        layer = 'back';
+        radius = 0.8 + Math.random() * 1.0;
+        speed = (0.5 + Math.random() * 0.6) * speedMultiplier;
+        alpha = 0.2 + Math.random() * 0.25;
+      }
+
+      flakes.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        radius,
+        speed,
+        drift: (Math.random() - 0.5) * 0.8,
+        phase: Math.random() * Math.PI * 2,
+        phaseSpeed: 0.01 + Math.random() * 0.02,
+        alpha,
+        layer,
+      });
+    }
+
+    let animationFrameId: number;
+
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      for (let i = 0; i < flakes.length; i++) {
+        const flake = flakes[i];
+        flake.phase += flake.phaseSpeed;
+        const swayX = Math.sin(flake.phase) * (flake.layer === 'fore' ? 1.4 : 0.8);
+
+        flake.x += flake.drift + swayX;
+        flake.y += flake.speed;
+
+        if (flake.y > height + 10) {
+          flake.y = -10;
+          flake.x = Math.random() * width;
+        }
+        if (flake.x > width + 10) flake.x = -10;
+        else if (flake.x < -10) flake.x = width + 10;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(flake.x, flake.y, flake.radius, 0, Math.PI * 2);
+
+        if (flake.layer === 'fore') {
+          const grad = ctx.createRadialGradient(
+            flake.x,
+            flake.y,
+            0,
+            flake.x,
+            flake.y,
+            flake.radius * 1.6
+          );
+          grad.addColorStop(0, `rgba(255, 255, 255, ${flake.alpha * opacity})`);
+          grad.addColorStop(0.6, `rgba(240, 248, 255, ${flake.alpha * 0.6 * opacity})`);
+          grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          ctx.fillStyle = grad;
+        } else {
+          ctx.fillStyle = `rgba(245, 250, 255, ${flake.alpha * opacity})`;
+        }
+
+        ctx.fill();
+        ctx.restore();
+      }
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    animationFrameId = requestAnimationFrame(render);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [density, speedMultiplier, opacity]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 pointer-events-none z-10"
+      style={{ mixBlendMode: 'screen' }}
+    />
+  );
+};
+
+/* =========================================================================
+   6. NEON GLOW INTERACTIVE BUTTON
+   ========================================================================= */
+
+const GlowButton: React.FC<{
+  id: string;
+  label: string;
+  icon?: React.ReactNode;
+  accentGlowColor?: string;
+  className?: string;
+  offsetClass?: string;
+  onClick: () => void;
+}> = ({
+  id,
+  label,
+  icon,
+  accentGlowColor = 'rgba(255, 255, 255,',
+  className = '',
+  offsetClass = '',
+  onClick,
+}) => {
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const btn = btnRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    btn.style.setProperty('--x', `${x}px`);
+    btn.style.setProperty('--y', `${y}px`);
+
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const dist = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+    const maxDist = Math.sqrt(Math.pow(centerX, 2) + Math.pow(centerY, 2));
+    const intensity = 0.15 + (dist / maxDist) * 0.65;
+    btn.style.setProperty('--i', intensity.toString());
+  };
+
+  const handleMouseLeave = () => {
+    const btn = btnRef.current;
+    if (!btn) return;
+    btn.style.setProperty('--i', '0');
+  };
+
+  return (
+    <div className={`relative flex flex-col items-center ${offsetClass}`}>
+      <button
+        id={id}
+        ref={btnRef}
+        type="button"
+        onClick={onClick}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        className={`relative flex items-center justify-center gap-3.5 px-8 sm:px-10 py-4.5 text-[18px] md:text-[19px] font-black tracking-[4px] text-white rounded-2xl cursor-pointer overflow-hidden transition-all duration-300 hover:scale-105 active:scale-95 select-none ${className}`}
+        style={{
+          background: 'rgba(255, 255, 255, 0.04)',
+          backdropFilter: 'blur(25px)',
+          WebkitBackdropFilter: 'blur(25px)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.45)',
+        }}
+      >
+        <div
+          className="absolute inset-0 pointer-events-none transition-opacity duration-150"
+          style={{
+            background: `radial-gradient(circle at var(--x, 50%) var(--y, 50%), ${accentGlowColor} var(--i, 0)) 0%, transparent 75%)`,
+          }}
+        />
+        <div className="relative z-10 flex items-center gap-3 pointer-events-none">
+          {icon && <span className="opacity-90">{icon}</span>}
+          <span className="drop-shadow-[0_2px_8px_rgba(255,255,255,0.4)]">{label}</span>
+        </div>
+      </button>
+    </div>
+  );
+};
+
+/* =========================================================================
+   7. DRAGGABLE & BACKGROUND PERSISTENT YOUTUBE MUSIC PLAYER
+   ========================================================================= */
+
+const YouTubePlayer: React.FC<{
+  videoId?: string;
+  defaultExpanded?: boolean;
+}> = ({ videoId = 'tm9GpM3lV3s', defaultExpanded = true }) => {
+  const constraintsRef = useRef<HTMLDivElement>(null);
+  const [isWindowVisible, setIsWindowVisible] = useState(true);
+  const [showVideo, setShowVideo] = useState(defaultExpanded);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const extractVideoId = (input: string) => {
+    if (!input) return 'tm9GpM3lV3s';
+    const match = input.match(
+      /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/
+    );
+    return match ? match[1] : input.trim();
+  };
+
+  const cleanVideoId = extractVideoId(videoId);
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${cleanVideoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1`;
+  const watchUrl = `https://www.youtube.com/watch?v=${cleanVideoId}`;
+  const isVideoVisible = isWindowVisible && showVideo;
+
+  return (
+    <div
+      ref={constraintsRef}
+      className="fixed inset-0 pointer-events-none z-40 overflow-hidden"
+    >
+      {isDragging && (
+        <div className="fixed inset-0 z-50 pointer-events-auto cursor-grabbing" />
+      )}
+
+      <motion.div
+        drag
+        dragConstraints={constraintsRef}
+        dragElastic={0.05}
+        dragMomentum={false}
+        onDragStart={() => setIsDragging(true)}
+        onDragEnd={() => setIsDragging(false)}
+        className="pointer-events-auto absolute bottom-4 left-4 select-none flex flex-col items-start cursor-grab active:cursor-grabbing"
+      >
+        {/* Minimized Pill */}
+        <AnimatePresence>
+          {!isWindowVisible && (
+            <motion.div
+              key="minimized-pill"
+              initial={{ opacity: 0, scale: 0.9, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 10 }}
+              onClick={() => {
+                if (!isDragging) setIsWindowVisible(true);
+              }}
+              title="드래그하여 위치 이동 / 클릭하여 플레이어 창 열기"
+              className="group flex items-center gap-2 px-3 py-2 rounded-full bg-neutral-950/90 border border-white/20 text-white backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.85)] hover:border-red-500/60 hover:bg-neutral-900 transition-colors"
+            >
+              <GripVertical className="w-3 h-3 text-neutral-500 group-hover:text-neutral-300 transition-colors" />
+              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.7)] group-hover:scale-110 transition-transform">
+                <Music className="w-2.5 h-2.5" />
+              </div>
+              <div className="flex items-center gap-1.5 text-left">
+                <span className="text-[11px] font-bold text-white tracking-wide">
+                  DON'T STOP
+                </span>
+                <span className="text-[10px] text-neutral-400 font-mono hidden sm:inline">
+                  (Slowed)
+                </span>
+              </div>
+              <div className="flex items-end gap-0.5 h-3 px-0.5">
+                <span className="w-[2px] h-2 bg-red-400 rounded-full animate-pulse" />
+                <span className="w-[2px] h-3 bg-red-400 rounded-full animate-pulse [animation-delay:150ms]" />
+                <span className="w-[2px] h-1.5 bg-red-400 rounded-full animate-pulse [animation-delay:300ms]" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Compact Player Card */}
+        {isWindowVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.2 }}
+            className={`flex flex-col w-[200px] sm:w-[210px] overflow-hidden border border-white/15 bg-neutral-950/90 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.9)] ${
+              isVideoVisible ? 'rounded-t-xl' : 'rounded-xl'
+            }`}
+          >
+            <div
+              title="마우스로 드래그하여 자유롭게 이동할 수 있습니다"
+              className="flex items-center justify-between gap-1 px-2 py-1.5 bg-white/5"
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="p-0.5 text-neutral-500 hover:text-neutral-300">
+                  <GripVertical className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-red-600 text-white shadow-[0_0_8px_rgba(220,38,38,0.5)]">
+                  <Youtube className="w-3 h-3 text-white" />
+                </div>
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowVideo(!showVideo);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="flex flex-col min-w-0 text-left cursor-pointer hover:opacity-80 transition-opacity"
+                  title={showVideo ? '영상 화면 접기' : '영상 화면 펼치기'}
+                >
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-bold text-white truncate max-w-[68px]">
+                      DON'T STOP
+                    </span>
+                    <div className="flex items-end gap-0.5 h-2.5 flex-shrink-0">
+                      <span className="w-[2px] h-2 bg-red-400 rounded-full animate-pulse" />
+                      <span className="w-[2px] h-3 bg-red-400 rounded-full animate-pulse [animation-delay:150ms]" />
+                      <span className="w-[2px] h-1.5 bg-red-400 rounded-full animate-pulse [animation-delay:300ms]" />
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-mono text-neutral-400 truncate">
+                    GLXXMSTRIDER
+                  </span>
+                </div>
+              </div>
+
+              <div
+                onPointerDown={(e) => e.stopPropagation()}
+                className="flex items-center gap-0.5 flex-shrink-0 text-neutral-400"
+              >
+                <a
+                  href={watchUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="YouTube에서 열기"
+                  className="p-1 hover:text-white hover:bg-white/10 rounded transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setShowVideo(!showVideo)}
+                  className="p-1 hover:text-white hover:bg-white/10 rounded transition-colors"
+                  title={showVideo ? '영상 화면 접기 (오디오 바만 유지)' : '영상 화면 펼치기'}
+                >
+                  {showVideo ? (
+                    <ChevronDown className="w-3.5 h-3.5 text-neutral-300" />
+                  ) : (
+                    <ChevronUp className="w-3.5 h-3.5 text-neutral-300" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsWindowVisible(false)}
+                  className="p-1 hover:text-red-400 hover:bg-white/10 rounded transition-colors"
+                  title="창 숨기기 (노래는 계속 재생됩니다)"
+                >
+                  <EyeOff className="w-3.5 h-3.5 text-neutral-300 hover:text-red-400" />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Continuous Audio Engine */}
+        <div
+          style={{ width: 200, height: 90 }}
+          className={`bg-black transition-opacity duration-300 ${
+            isVideoVisible
+              ? 'block rounded-b-xl overflow-hidden opacity-100 pointer-events-auto border-x border-b border-white/15'
+              : 'fixed bottom-0 left-0 -z-50 opacity-[0.005] pointer-events-none'
+          }`}
+        >
+          <iframe
+            title="YouTube Audio Player: GLXXMSTRIDER - DON'T STOP - Slowed"
+            src={embedUrl}
+            width="200"
+            height="90"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            loading="eager"
+            className="w-full h-full block"
+          />
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+/* =========================================================================
+   8. PLATFORM MODAL SCREEN (YOUTUBE & DISCORD)
+   ========================================================================= */
+
+const PlatformScreen: React.FC<{
+  platform: 'youtube' | 'discord' | null;
+  onClose: () => void;
+  onCopySuccess: (message: string) => void;
+}> = ({ platform, onClose, onCopySuccess }) => {
+  const [copied, setCopied] = useState(false);
+
+  if (!platform) return null;
+
+  const isYoutube = platform === 'youtube';
+  const url = isYoutube
+    ? 'https://www.youtube.com/@localxtop'
+    : 'https://discord.gg/localx';
+  const appUrl = isYoutube
+    ? 'https://www.youtube.com/@localxtop'
+    : 'discord://discord.gg/localx';
+
+  const title = isYoutube ? 'YOUTUBE' : 'DISCORD';
+  const actionLabel = isYoutube ? '유튜브로 바로 실행' : '디스코드로 바로 실행';
+  const themeColor = isYoutube ? 'rgba(255, 0, 0,' : 'rgba(88, 101, 242,';
+  const borderHighlight = isYoutube ? 'border-red-500/40' : 'border-indigo-500/40';
+  const glowShadow = isYoutube
+    ? 'shadow-[0_0_50px_rgba(255,0,0,0.35)]'
+    : 'shadow-[0_0_50px_rgba(88,101,242,0.35)]';
+
+  const handleCopy = () => {
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        setCopied(true);
+        onCopySuccess(`${title} 링크가 복사되었습니다!`);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setCopied(true);
+        onCopySuccess(`${title} 링크가 복사되었습니다!`);
+        setTimeout(() => setCopied(false), 2000);
+      });
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.3 }}
+        onClick={onClose}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/40 backdrop-blur-[3px] text-white select-none cursor-pointer"
+      >
+        <div
+          className="absolute inset-0 pointer-events-none opacity-25"
+          style={{
+            background: `radial-gradient(circle at 50% 45%, ${themeColor} 0.55) 0%, transparent 60%)`,
+          }}
+        />
+
+        <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-20 pointer-events-none">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-xl bg-black/40 hover:bg-white/15 border border-white/15 text-neutral-300 hover:text-white transition-all text-xs font-mono tracking-wider cursor-pointer group backdrop-blur-md"
+          >
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+            <span>메인으로 돌아가기</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="pointer-events-auto p-2.5 rounded-xl bg-black/40 hover:bg-white/15 border border-white/15 text-neutral-400 hover:text-white transition-all cursor-pointer backdrop-blur-md"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <motion.div
+          initial={{ y: 20, scale: 0.96, opacity: 0 }}
+          animate={{ y: 0, scale: 1, opacity: 1 }}
+          exit={{ y: 15, scale: 0.96, opacity: 0 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          className={`relative z-10 w-full max-w-lg flex flex-col items-center text-center p-8 sm:p-10 rounded-3xl bg-neutral-950/75 border ${borderHighlight} ${glowShadow} backdrop-blur-2xl cursor-default`}
+        >
+          <div
+            className="p-5 rounded-2xl mb-5 flex items-center justify-center"
+            style={{
+              background: `radial-gradient(circle, ${themeColor} 0.3) 0%, rgba(255,255,255,0.04) 100%)`,
+              border: `1px solid ${isYoutube ? 'rgba(255,0,0,0.4)' : 'rgba(88,101,242,0.4)'}`,
+            }}
+          >
+            {isYoutube ? (
+              <Youtube className="w-12 h-12 text-red-500 drop-shadow-[0_0_20px_rgba(255,0,0,0.8)]" />
+            ) : (
+              <MessageSquare className="w-12 h-12 text-indigo-400 drop-shadow-[0_0_20px_rgba(88,101,242,0.8)]" />
+            )}
+          </div>
+
+          <h2 className="text-2xl sm:text-3xl font-black tracking-[6px] uppercase text-white drop-shadow-[0_2px_12px_rgba(255,255,255,0.3)]">
+            {title}
+          </h2>
+          <p className="text-xs font-mono text-neutral-400 mt-1 tracking-widest uppercase">
+            {isYoutube ? '@localxtop' : 'discord.gg/localx'}
+          </p>
+
+          <div className="w-full mt-8 mb-4 flex flex-col items-start gap-2 text-left">
+            <label className="text-[11px] font-mono tracking-wider text-neutral-400 flex items-center gap-1.5 uppercase">
+              <Sparkles className="w-3 h-3 text-neutral-400" />
+              <span>링크 복사</span>
+            </label>
+
+            <div
+              onClick={handleCopy}
+              className="w-full flex items-center justify-between p-2 rounded-2xl bg-black/50 border border-white/15 hover:border-white/35 transition-all cursor-pointer group shadow-inner backdrop-blur-md"
+            >
+              <input
+                type="text"
+                readOnly
+                value={url}
+                className="w-full bg-transparent px-3 py-1.5 text-xs sm:text-sm font-mono text-neutral-200 outline-none select-all cursor-pointer"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopy();
+                }}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  copied
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-white/10 hover:bg-white/20 text-white border border-white/10 group-hover:border-white/25'
+                }`}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>복사됨!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-neutral-300" />
+                    <span>복사</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="w-full mt-2 flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+              className={`w-full py-4 px-6 rounded-2xl text-sm sm:text-base font-black tracking-[3px] uppercase text-white transition-all duration-300 flex items-center justify-center gap-3 cursor-pointer shadow-xl hover:scale-[1.02] active:scale-[0.98] ${
+                isYoutube
+                  ? 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 border border-red-400/40 shadow-red-950/60'
+                  : 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 border border-indigo-400/40 shadow-indigo-950/60'
+              }`}
+            >
+              <span>{actionLabel}</span>
+              <ExternalLink className="w-4 h-4 opacity-90" />
+            </button>
+
+            {!isYoutube && (
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = appUrl;
+                }}
+                className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-950/30 hover:bg-indigo-950/60 border border-indigo-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>디스코드 전용 앱으로 바로 열기</span>
+              </button>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+
+/* =========================================================================
+   9. TOAST NOTIFICATION COMPONENT
+   ========================================================================= */
+
+const Toast: React.FC<{ toast: ToastMessage | null; onClose: () => void }> = ({
+  toast,
+  onClose,
+}) => {
+  if (!toast) return null;
+
+  return (
+    <div
+      className="fixed bottom-6 right-6 z-50 max-w-md w-full sm:w-auto flex items-center gap-3 px-5 py-3.5 rounded-xl bg-neutral-900/90 border border-white/20 text-white backdrop-blur-xl shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-5"
+      style={{
+        boxShadow:
+          '0 10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.1)',
+      }}
+    >
+      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+        <CheckCircle2 className="w-4 h-4" />
+      </div>
+      <div className="flex-1 min-w-0 pr-2">
+        <p className="text-sm font-semibold tracking-wide text-neutral-100 flex items-center gap-1.5">
+          {toast.title}
+          <Copy className="w-3.5 h-3.5 text-neutral-400" />
+        </p>
+        {toast.subtitle && (
+          <p className="text-xs text-neutral-400 mt-0.5 font-mono truncate">
+            {toast.subtitle}
+          </p>
+        )}
+      </div>
+      {toast.actionUrl && (
+        <a
+          href={toast.actionUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 transition-colors flex items-center gap-1 text-neutral-200"
+        >
+          <span>{toast.actionLabel || '열기'}</span>
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      )}
+      <button
+        type="button"
+        onClick={onClose}
+        className="text-neutral-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+};
+
+/* =========================================================================
+   10. IMAGE SETTINGS MODAL (URL DIRECT EDIT)
+   ========================================================================= */
+
+const ImageSettingsModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  config: AssetConfigType;
+  onSave: (newConfig: AssetConfigType) => void;
+  onReset: () => void;
+}> = ({ isOpen, onClose, config, onSave, onReset }) => {
+  const [formData, setFormData] = useState<AssetConfigType>(config);
+  const [savedNotice, setSavedNotice] = useState(false);
+
+  useEffect(() => {
+    setFormData(config);
+  }, [config, isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleChange = (key: keyof AssetConfigType, value: string) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleApply = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+    setSavedNotice(true);
+    setTimeout(() => {
+      setSavedNotice(false);
+      onClose();
+    }, 1000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-xl rounded-2xl bg-neutral-900 border border-white/20 p-6 shadow-2xl text-white">
+        <div className="flex items-center justify-between pb-4 border-b border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400">
+              <ImageIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold tracking-tight">이미지 직접 URL 설정</h2>
+              <p className="text-xs text-neutral-400 font-mono">
+                코드 및 브라우저 저장소 실시간 반영
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="my-4 p-3 rounded-xl bg-neutral-950 border border-white/10 text-xs text-neutral-300 flex items-start gap-2.5">
+          <Code2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold text-neutral-200">
+              입력한 URL은 즉시 사이트에 적용되며 브라우저에 안전하게 저장됩니다.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleApply} className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+              <LinkIcon className="w-3.5 h-3.5 text-neutral-400" />
+              1. 'L' 로고 직접 URL (인트로 및 메인)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={formData.logoL}
+                onChange={(e) => handleChange('logoL', e.target.value)}
+                placeholder="https://i.postimg.cc/..."
+                className="flex-1 px-3 py-2 rounded-lg bg-black/60 border border-white/15 text-xs text-neutral-200 focus:outline-none focus:border-red-500 font-mono"
+              />
+              {formData.logoL && (
+                <div className="w-10 h-10 rounded-lg bg-black border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  <img src={formData.logoL} alt="Preview L" className="h-7 object-contain" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+              <LinkIcon className="w-3.5 h-3.5 text-neutral-400" />
+              2. 'ocalx' 글자 로고 직접 URL
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={formData.logoOcalx}
+                onChange={(e) => handleChange('logoOcalx', e.target.value)}
+                placeholder="https://i.postimg.cc/..."
+                className="flex-1 px-3 py-2 rounded-lg bg-black/60 border border-white/15 text-xs text-neutral-200 focus:outline-none focus:border-red-500 font-mono"
+              />
+              {formData.logoOcalx && (
+                <div className="w-14 h-10 rounded-lg bg-black border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  <img src={formData.logoOcalx} alt="Preview ocalx" className="h-5 object-contain" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+              <LinkIcon className="w-3.5 h-3.5 text-neutral-400" />
+              3. 메인 화면 중앙 로고 URL (비워두면 1번 L 로고 사용)
+            </label>
+            <input
+              type="url"
+              value={formData.mainLogo || ''}
+              onChange={(e) => handleChange('mainLogo', e.target.value)}
+              placeholder="비워두시면 1번 L 로고가 사용됩니다"
+              className="w-full px-3 py-2 rounded-lg bg-black/60 border border-white/15 text-xs text-neutral-200 focus:outline-none focus:border-red-500 font-mono"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+              <LinkIcon className="w-3.5 h-3.5 text-red-500" />
+              4. 유튜브 배경 음악 (영상 ID 또는 YouTube URL)
+            </label>
+            <input
+              type="text"
+              value={formData.youtubeMusicId || ''}
+              onChange={(e) => handleChange('youtubeMusicId', e.target.value)}
+              placeholder="tm9GpM3lV3s 또는 https://www.youtube.com/watch?v=..."
+              className="w-full px-3 py-2 rounded-lg bg-black/60 border border-white/15 text-xs text-neutral-200 focus:outline-none focus:border-red-500 font-mono"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-white/10">
+            <button
+              type="button"
+              onClick={() => {
+                onReset();
+                onClose();
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              기본값 복원
+            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs font-bold bg-white text-black hover:bg-neutral-200 transition-colors cursor-pointer"
+              >
+                {savedNotice ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span>적용 완료!</span>
+                  </>
+                ) : (
+                  <span>적용하기</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+/* =========================================================================
+   11. MAIN APPLICATION COMPONENT (ENTRY POINT)
+   ========================================================================= */
+
+export default function App() {
+  const [stage, setStage] = useState<'intro' | 'revealing' | 'main'>('intro');
+  const [weather, setWeather] = useState<'rain' | 'snow' | 'none'>('rain');
+  const [activePlatform, setActivePlatform] = useState<'youtube' | 'discord' | null>(null);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  const [assets, setAssets] = useState<AssetConfigType>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        return { ...DEFAULT_ASSET_CONFIG, ...JSON.parse(saved) };
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_ASSET_CONFIG;
+  });
+
+  const showToast = (msg: Omit<ToastMessage, 'id'>) => {
+    const newToast: ToastMessage = {
+      id: Date.now().toString(),
+      ...msg,
+    };
+    setToast(newToast);
+    setTimeout(() => {
+      setToast((prev) => (prev?.id === newToast.id ? null : prev));
+    }, 3500);
+  };
+
+  const handleStartIntro = () => {
+    if (stage !== 'intro') return;
+    setStage('revealing');
+    setTimeout(() => {
+      setStage('main');
+    }, 1900);
+  };
+
+  const handleReplay = () => {
+    setStage('intro');
+  };
+
+  const handleSaveAssets = (newConfig: AssetConfigType) => {
+    setAssets(newConfig);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newConfig));
+    } catch {
+      // ignore
+    }
+    showToast({
+      title: '설정이 적용되었습니다',
+      type: 'success',
+    });
+  };
+
+  const handleResetAssets = () => {
+    setAssets(DEFAULT_ASSET_CONFIG);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    showToast({
+      title: '기본 설정으로 복원되었습니다',
+      type: 'info',
+    });
+  };
+
+  const displayMainLogo = assets.mainLogo?.trim() || assets.logoL;
+
+  return (
+    <div className="relative w-screen h-screen overflow-hidden bg-black text-white font-sans select-none">
+      {/* 1. INTRO SCREEN */}
+      <AnimatePresence>
+        {(stage === 'intro' || stage === 'revealing') && (
+          <motion.div
+            id="intro-overlay"
+            key="intro-overlay"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.85, ease: 'easeInOut' } }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black px-4"
+          >
+            <div className="relative flex items-center justify-center select-none">
+              <button
+                id="intro-l-button"
+                type="button"
+                onClick={handleStartIntro}
+                className={`relative z-20 outline-none border-none bg-transparent p-0 transition-transform duration-200 ${
+                  stage === 'intro'
+                    ? 'cursor-pointer hover:scale-[1.03] active:scale-[0.98]'
+                    : 'cursor-default'
+                }`}
+                style={{
+                  filter: 'drop-shadow(0 0 32px rgba(255, 255, 255, 0.45))',
+                }}
+                title="클릭하여 시작"
+              >
+                <img
+                  src={displayMainLogo}
+                  alt="Localx L Logo"
+                  className="w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 object-contain rounded-2xl pointer-events-none"
+                />
+              </button>
+
+              {stage === 'revealing' && (
+                <motion.div
+                  initial={{ width: 0, opacity: 0, x: -16, filter: 'blur(6px)' }}
+                  animate={{ width: 'auto', opacity: 1, x: 0, filter: 'blur(0px)' }}
+                  transition={{
+                    duration: 0.85,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                  className="overflow-hidden flex items-center pl-1 sm:pl-2 whitespace-nowrap"
+                >
+                  <RoundedOcalx />
+                </motion.div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 2. MAIN APPLICATION */}
+      {assets.backgroundImage && (
+        <div
+          className="absolute inset-0 bg-cover bg-center z-0 opacity-40 transition-opacity duration-1000 pointer-events-none"
+          style={{ backgroundImage: `url(${assets.backgroundImage})` }}
+        />
+      )}
+
+      {/* WebGL Dark Wave Background */}
+      <BackgroundCanvas opacity={stage === 'main' ? 1 : 0.3} />
+
+      {/* Rain Canvas */}
+      {weather === 'rain' && (
+        <RainCanvas
+          density={170}
+          windAngle={0.12}
+          speedMultiplier={1.05}
+          opacity={0.85}
+        />
+      )}
+
+      {/* Snow Canvas */}
+      {weather === 'snow' && (
+        <SnowCanvas density={150} speedMultiplier={1.0} opacity={0.9} />
+      )}
+
+      {/* Header Controls */}
+      {stage === 'main' && (
+        <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-6 py-5 pointer-events-none">
+          <div className="text-xs uppercase tracking-[0.4em] font-mono text-neutral-500 pointer-events-auto">
+            Localx • Portal
+          </div>
+
+          <div className="flex items-center gap-2.5 pointer-events-auto">
+            <button
+              id="image-settings-btn"
+              type="button"
+              onClick={() => setIsImageModalOpen(true)}
+              title="이미지 URL 직접 설정"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-white/15 border border-white/10 text-neutral-300 hover:text-white transition-all backdrop-blur-md cursor-pointer"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-neutral-300" />
+              <span className="hidden sm:inline">이미지 설정</span>
+            </button>
+
+            {/* Weather Selector */}
+            <div
+              id="weather-selector"
+              className="flex items-center rounded-xl bg-white/5 border border-white/10 p-0.5 backdrop-blur-md shadow-sm"
+            >
+              <button
+                id="weather-rain-btn"
+                type="button"
+                onClick={() => {
+                  setWeather('rain');
+                  showToast({ title: '비 효과가 켜졌습니다 🌧️', type: 'info' });
+                }}
+                title="비 효과 (Rain)"
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  weather === 'rain'
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/35 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                    : 'text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <CloudRain className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">비</span>
+              </button>
+
+              <button
+                id="weather-snow-btn"
+                type="button"
+                onClick={() => {
+                  setWeather('snow');
+                  showToast({ title: '눈 효과가 켜졌습니다 ❄️', type: 'info' });
+                }}
+                title="눈 효과 (Snow)"
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  weather === 'snow'
+                    ? 'bg-sky-400/20 text-sky-200 border border-sky-400/35 shadow-[0_0_12px_rgba(56,189,248,0.25)]'
+                    : 'text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <Snowflake className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">눈</span>
+              </button>
+
+              <button
+                id="weather-off-btn"
+                type="button"
+                onClick={() => {
+                  setWeather('none');
+                  showToast({ title: '날씨 효과가 꺼졌습니다', type: 'info' });
+                }}
+                title="날씨 끄기"
+                className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                  weather === 'none'
+                    ? 'bg-white/15 text-white border border-white/20'
+                    : 'text-neutral-500 hover:text-neutral-300 hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <CloudOff className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <button
+              id="replay-btn"
+              type="button"
+              onClick={handleReplay}
+              title="인트로 애니메이션 다시보기"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-white/15 border border-white/10 text-neutral-300 hover:text-white transition-all backdrop-blur-md cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">다시보기</span>
+            </button>
+          </div>
+        </header>
+      )}
+
+      {/* Main Content Dashboard */}
+      {stage === 'main' && (
+        <main
+          id="portal-canvas"
+          className="relative z-10 w-full h-full flex flex-col justify-between items-center py-10 px-4"
+        >
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="pt-4 sm:pt-8 text-center"
+          >
+            <h1
+              id="top-title"
+              className="text-sm sm:text-base md:text-lg font-black tracking-[10px] sm:tracking-[12px] uppercase text-white/70 select-none"
+            >
+              Localx on top
+            </h1>
+          </motion.div>
+
+          {/* Center Entity: Fixed Size Gentle Float */}
+          <div className="relative my-auto flex flex-col items-center justify-center">
+            <motion.div
+              id="central-floating-l"
+              animate={{
+                y: [-9, 9, -9],
+              }}
+              transition={{
+                duration: 4.6,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+              className="relative z-20 flex flex-col items-center justify-center cursor-default select-none"
+            >
+              <img
+                src={displayMainLogo}
+                alt="Localx L Logo"
+                className="w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 object-contain rounded-2xl pointer-events-none filter drop-shadow-[0_0_35px_rgba(255,255,255,0.45)]"
+              />
+            </motion.div>
+
+            <motion.div
+              animate={{
+                opacity: [0.35, 0.15, 0.35],
+                scaleX: [1.05, 0.85, 1.05],
+              }}
+              transition={{
+                duration: 4.6,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+              className="w-28 sm:w-36 h-3 rounded-full bg-white/20 blur-md mt-4 pointer-events-none"
+            />
+          </div>
+
+          {/* Social Action Buttons: YouTube & Discord */}
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.15, ease: 'easeOut' }}
+            className="w-full flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8 px-4 pb-4"
+          >
+            <GlowButton
+              id="yt-btn"
+              label="YOUTUBE"
+              icon={<Youtube className="w-5 h-5 text-red-500" />}
+              accentGlowColor="rgba(255, 60, 60,"
+              className="min-w-[210px] sm:min-w-[230px] border-white/20 hover:border-red-500/50"
+              offsetClass="sm:-translate-x-3"
+              onClick={() => setActivePlatform('youtube')}
+            />
+
+            <GlowButton
+              id="discord-btn"
+              label="DISCORD"
+              icon={<MessageSquare className="w-5 h-5 text-indigo-400" />}
+              accentGlowColor="rgba(114, 137, 218,"
+              className="min-w-[210px] sm:min-w-[230px] border-white/20 hover:border-indigo-400/50"
+              onClick={() => setActivePlatform('discord')}
+            />
+          </motion.div>
+        </main>
+      )}
+
+      {/* 🎵 YOUTUBE MUSIC PLAYER (Draggable + Continuous Background Audio) */}
+      {stage === 'main' && (
+        <YouTubePlayer
+          videoId={assets.youtubeMusicId || 'tm9GpM3lV3s'}
+          defaultExpanded={true}
+        />
+      )}
+
+      {/* FULL-SCREEN PLATFORM TRANSITION */}
+      <PlatformScreen
+        platform={activePlatform}
+        onClose={() => setActivePlatform(null)}
+        onCopySuccess={(msg) =>
+          showToast({
+            title: msg,
+            type: 'success',
+          })
+        }
+      />
+
+      {/* Toast Notification */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
+
+      {/* Image Settings Modal */}
+      <ImageSettingsModal
+        isOpen={isImageModalOpen}
+        onClose={() => setIsImageModalOpen(false)}
+        config={assets}
+        onSave={handleSaveAssets}
+        onReset={handleResetAssets}
+      />
+    </div>
+  );
+}
